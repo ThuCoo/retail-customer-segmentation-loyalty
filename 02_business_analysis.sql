@@ -44,7 +44,7 @@ ORDER BY total_revenue DESC, avg_spend DESC;
 
 -- Q6. Which 5 products have the highest percentage of purchases with discounts applied?
 SELECT   TOP 5 item_purchased,
-               ROUND((SUM(CASE WHEN discount_applied = 'Yes' THEN 1.0 ELSE 0.0 END) / COUNT(*)) * 100, 2) AS discount_usage_rate
+               CAST((SUM(CASE WHEN discount_applied = 'Yes' THEN 1.0 ELSE 0.0 END) / COUNT(*)) * 100 AS DECIMAL(10, 2)) AS discount_usage_rate
 FROM     customer_behavior
 GROUP BY item_purchased
 ORDER BY discount_usage_rate DESC;
@@ -84,4 +84,5 @@ GROUP BY subscription_status;
 SELECT   age_group,
          SUM(purchase_amount) AS total_revenue
 FROM     customer_behavior
-GROUP BY age_group;
+GROUP BY age_group
+ORDER BY total_revenue DESC;

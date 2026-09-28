@@ -148,7 +148,9 @@ Key features:
     |Young Adult|34630 |
 
 <h2> Dashboard using Power BI </h2>
+
 ![Dashboard](https://github.com/ThuCoo/DAProject_CustomerBehavior/blob/065623b87b36af5a466a74a0570c9bdd4afe9f7d/dashboard.png)
+
 <h2> Business Reccomendations </h2>
 
 - **Boost Subscription** - Promote exclusive benefits for customers.

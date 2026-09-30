@@ -151,7 +151,7 @@ Key features:
 
 ![Dashboard](https://github.com/ThuCoo/DAProject_CustomerBehavior/blob/065623b87b36af5a466a74a0570c9bdd4afe9f7d/dashboard.png)
 
-<h2> Business Reccomendations </h2>
+<h2> Business Recommendations </h2>
 
 - **Boost Subscription** - Promote exclusive benefits for customers.
 - **Customer Loyalty Program** - Rewards repeating buyers to move them to "Loyal" segment.

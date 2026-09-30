@@ -1,4 +1,4 @@
-<h1> Data Analysis Project on Customers' Shopping Behavior </h1>
+<h1> Customer Shopping Behavior Analysis </h1>
 
 This is a project following Amlan Mohanty's walkthrough
 

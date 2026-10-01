@@ -1,0 +1,116 @@
+# Retail Customer Segmentation & Loyalty Optimization BRD
+
+**Role Focus:** Data Analysis (Python, MS SQL Server, Power BI) | Growth Product Ownership & BA (Cohort Strategy, RICE Prioritization, Promo Engine Rules)
+
+> **Quick Navigation:**
+>
+> - **For Data Teams:** [Data Preprocessing & Feature Engineering](#2-data-preprocessing--sql-pipeline) | [SQL Business Analysis (Q1–Q10) & Power BI Dashboard](#3-sql-exploratory-analysis--customer-segments)
+> - **For Product & BA Teams:** [Executive Problem Statement](#1-executive-problem-statement) | [RICE Feature Prioritization & Promo Logic](#4-product-strategy--rice-prioritization) | [User Stories & KPI Framework](#5-agile-user-stories--kpi-framework)
+
+---
+
+## 1. Executive Problem Statement
+
+Blanket promotional discounting often erodes retail profit margins without increasing long-term customer lifetime value (LTV) or average order value (AOV). This project analyzes **3,900 retail transactions** across **50 US states** using Python, MS SQL Server (`dbo.customer_behavior`), and Power BI to evaluate demographic buying patterns, subscription tier performance, and product discount dependency, translating those insights into a **Tiered Loyalty & Minimum-Spend Promo Engine BRD**.
+
+- **Analytical Baseline:** Modeled **3,900 customer orders** (mean spend **$59.76 USD**, overall median **$60.00 USD**, mean rating **3.75/5.0**). Found that **43.0% of all transactions (1,677 orders)** used a discount/promo code, while **73.0% of shoppers (2,847 customers)** remain unsubscribed (`subscription_status = 'No'`) despite an average history of **25.35 previous purchases**.
+- **What-If Opportunity Sizing (Dataset Simulation):** Historical transaction analysis reveals that **50%** of all discounted orders (`discount_applied = 'Yes'`) fell below the discounted cohort's median basket size of **$60 USD**, eroding margins on small checkouts. Simulating a **Minimum-Spend Promo Threshold** (requiring a **$60+ USD** cart to unlock promo codes) shows that if just **25%** of sub-median discount shoppers add items to meet the threshold, the store captures **$4452.75 USD in incremental revenue** (a **4.5%** lift across the discounted cohort).
+
+<details>
+<summary><b>🔍 View SQL Logic Used for Opportunity Sizing (from 02_business_analysis.sql)</b></summary>
+
+```sql
+WITH order_stats AS (
+    SELECT purchase_amount,
+           discount_applied,
+           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY purchase_amount) OVER () AS median_aov
+    FROM customer_behavior
+    WHERE discount_applied = 'Yes'
+)
+SELECT MAX(median_aov) AS median_aov_threshold,
+       CAST(ROUND((SUM(CASE WHEN purchase_amount < median_aov THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 1) AS FLOAT) AS pct_below_median,
+       ROUND(SUM(CASE WHEN purchase_amount < median_aov THEN (median_aov - purchase_amount) * 0.25 ELSE 0 END), 2) AS simulated_rev_lift,
+       ROUND((SUM(CASE WHEN purchase_amount < median_aov THEN (median_aov - purchase_amount) * 0.25 ELSE 0 END) * 100.0) / SUM(purchase_amount), 1) AS cohort_rev_lift_pct
+FROM order_stats;
+```
+
+</details>
+
+---
+
+## 2. Data Preprocessing & SQL Pipeline
+
+```mermaid
+    flowchart LR
+        A("customer_shopping_behavior.csv (3,900 rows)") -->|01_data_load_eda.ipynb / pandas| B("Clean, Impute & Feature Engineer")
+        B -->|SQLAlchemy + pyodbc| C[("MS SQL Server: da_projects.dbo.customer_behavior")]
+        C -->|02_business_analysis.sql| D["Power BI Dashboard (dashboard.pbix)"]
+        D -->|Business Rules & RICE Scoring| E["loyalty_and_promo_brd.md"]
+```
+
+- **Schema Standardization & Deduplication:**
+  - Converted all 18 raw column headers to `snake_case` and renamed `purchase_amount_(usd)` to `purchase_amount`.
+  - Verified 100% programmatic equivalence between `discount_applied` and `promo_code_used` and dropped the redundant `promo_code_used` column.
+- **Category-Unbiased Null Imputation:** Imputed **37 missing `review_rating` records** using category-partitioned medians (`df.groupby('category')['review_rating'].transform(lambda x: x.fillna(x.median()))`) to prevent cross-category rating distortion.
+- **Analytical Feature Engineering & Database Ingestion:**
+  - **Demographic Cohorts (`age_group`):** Binned customer ages (`18–70`, median `44`) via `pd.cut` into `'Young Adult'` (`0–25`), `'Adult'` (`26–40`), `'Middle-aged'` (`41–60`), and `'Senior'` (`61–120`).
+  - **Numerical Purchase Cycles (`purchase_frequency_days`):** Mapped 7 text frequency strings (`Weekly`: `7`, `Fortnightly` / `Bi-Weekly`: `14`, `Monthly`: `30`, `Quarterly` / `Every 3 Months`: `90`, `Annually`: `365`) into integer day intervals before ingesting the 19-column table into **MS SQL Server** (`da_projects.dbo.customer_behavior`).
+
+---
+
+## 3. SQL Exploratory Analysis & Customer Segments
+
+![Power BI Dashboard Preview](dashboards/dashboard.png)
+
+Using **MS SQL Server**, ten core business questions (`Q1–Q10`) were analyzed:
+
+1. **Discount Dependency vs. High-Value Promo Users (`Q2` & `Q6`):** While **Q2** isolates profitable promo users who spend above the store average (`$59.76`) when given a discount, **Q6** ranks the Top 5 products with the highest `discount_usage_rate`, exposing items that rely heavily on margin-diluting promotions without minimum cart gates.
+2. **Loyalty & Repeat-Buyer Subscription Gap (`Q5`, `Q7` & `Q9`):** Using CTEs in **Q7** to segment buyers into `'New'` (`previous_purchases = 1`), `'Returning'` (`2–10`), and `'Loyal'` (`> 10`), alongside **Q9** (`previous_purchases >= 5` by `subscription_status`) and **Q5**, revealed that a massive cohort of proven repeat buyers (`73.0%` of the dataset) has not enrolled in the subscription program.
+3. **Category Bestsellers & Top-Rated Upsell Candidates (`Q3` & `Q8`):** **Q3** identifies the Top 5 products by `avg_review_rating`, while **Q8** uses `DENSE_RANK()` to isolate the Top 3 most purchased items per category—providing a data-backed product feed for checkout upsell carousels.
+4. **Demographic, Gender & Shipping Spend Drivers (`Q1`, `Q4` & `Q10`):** Evaluated revenue splits across `gender` (**Q1**) and `age_group` (**Q10**), while **Q4** compares average basket sizes between `'Standard'` and `'Express'` `shipping_type` to inform loyalty shipping perks.
+
+---
+
+## 4. Product Strategy & RICE Prioritization
+
+To turn these SQL and Power BI insights into an actionable e-commerce roadmap, three candidate growth features were scored using the **RICE Prioritization Framework** (**Reach × Impact × Confidence ÷ Effort**) based on cohort sizes in `dbo.customer_behavior`:
+
+| Initiative                                            | Target Dataset Cohort                      | Reach (Users) | Impact (0.5–3) | Confidence (%) | Effort (Wks) | **RICE Score** | Priority             |
+| :---------------------------------------------------- | :----------------------------------------- | :------------ | :------------- | :------------- | :----------- | :------------- | :------------------- |
+| **1. Minimum-Spend Promo Gate (`$60+`) & Upsell Bar** | `1,677` Promo Users (`Q2`, `Q6`)           | 1,677         | 2.0            | 90%            | 2.0          | **1,509**      | **P1 — Build First** |
+| **2. Repeat-Buyer Checkout Subscription Nudge**       | `2,847` Non-Subscribers (`Q5`, `Q7`, `Q9`) | 2,500         | 1.5            | 80%            | 3.0          | **1,000**      | **P2 — Next Sprint** |
+| **3. Automated Cycle Replenishment Triggers**         | `purchase_frequency_days <= 30` (`Q10`)    | 2,181         | 1.0            | 75%            | 3.0          | **545**        | **P3 — Backlog**     |
+
+### Checkout Promo Engine Workflow (P1 Feature)
+
+```mermaid
+flowchart LR
+    A["Shopper Applies Promo Code"] --> B{"purchase_amount >= $60 Threshold?"}
+    B -- Yes --> C["Apply Discount (discount_applied = 'Yes')"]
+    B -- No --> D["Hold Promo & Show Progress Bar: Add $(60 - purchase_amount) more"]
+    D --> E["Populate Upsell Carousel with Q8 Category Top-3 & Q3 Top-Rated Items"]
+```
+
+---
+
+## 5. Agile User Stories & KPI Framework
+
+### User Story 1: Dynamic Minimum-Spend Promo Threshold (`Q2`, `Q6`, `Q8`)
+
+- **As an** E-Commerce Growth Product Owner,
+- **I want** promotional codes (`discount_applied = 'Yes'`) to require a minimum cart subtotal of **$60 USD** and dynamically recommend top-ranked category items when a cart falls short,
+- **So that** promotions drive basket expansion (`+$4452.75 USD` simulated revenue lift) rather than subsidizing sub-median orders.
+- **Acceptance Criteria (Given / When / Then):**
+  - **Given** a shopper applying a promo code at checkout,
+  - **When** `purchase_amount < $60`,
+  - **Then** withhold the discount deduction, display a progress bar showing `"Add $(60 - purchase_amount) more to unlock your discount"`, and render 3 quick-add items matching the shopper's `category` from the **Q8 Top-3 Bestsellers (`ranking <= 3`)** and **Q3 Top-Rated (`review_rating >= 3.8`)** lists.
+
+### Proposed KPI Monitoring Framework (Tracked in `dashboard.pbix`)
+
+| Metric Category    | Metric Name                        | SQL / Power BI DAX Logic                                                               | Target Objective                                                                              |
+| :----------------- | :--------------------------------- | :------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| **North Star KPI** | **Discounted Cohort AOV**          | `AVG(purchase_amount)` where `discount_applied = 'Yes'`                                | Lift discounted average spend above the `$59.76` storewide mean (`Q2`).                       |
+| **Conversion KPI** | **Repeat-Buyer Subscription Rate** | `COUNT(subscription_status = 'Yes') / COUNT(*)` where `previous_purchases >= 5` (`Q9`) | Convert high-frequency `'Returning'` and `'Loyal'` shoppers (`Q7`) from the `27.0%` baseline. |
+| **Guardrail KPI**  | **Promo Gate Abandonment Rate**    | `abandoned_sub_median_carts / total_sub_median_promo_attempts`                         | Ensure the `$60` minimum threshold does not spike checkout drop-off.                          |
+
+---

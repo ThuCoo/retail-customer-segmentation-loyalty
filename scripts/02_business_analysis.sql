@@ -44,7 +44,7 @@ ORDER BY total_revenue DESC, avg_spend DESC;
 
 -- Q6. Which 5 products have the highest percentage of purchases with discounts applied?
 SELECT   TOP 5 item_purchased,
-               CAST((SUM(CASE WHEN discount_applied = 'Yes' THEN 1.0 ELSE 0.0 END) / COUNT(*)) * 100 AS DECIMAL(10, 2)) AS discount_usage_rate
+               CAST ((SUM(CASE WHEN discount_applied = 'Yes' THEN 1.0 ELSE 0.0 END) / COUNT(*)) * 100 AS DECIMAL (10, 2)) AS discount_usage_rate
 FROM     customer_behavior
 GROUP BY item_purchased
 ORDER BY discount_usage_rate DESC;
@@ -86,3 +86,16 @@ SELECT   age_group,
 FROM     customer_behavior
 GROUP BY age_group
 ORDER BY total_revenue DESC;
+
+-- Business Case & What-If Opportunity Sizing (For Product Spec)
+WITH   order_stats
+AS     (SELECT purchase_amount,
+               discount_applied,
+               PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY purchase_amount) OVER () AS median_aov
+        FROM   customer_behavior
+        WHERE  discount_applied = 'Yes')
+SELECT MAX(median_aov) AS median_aov_threshold,
+       CAST (ROUND((SUM(CASE WHEN purchase_amount < median_aov THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 1) AS FLOAT) AS pct_below_median,
+       ROUND(SUM(CASE WHEN purchase_amount < median_aov THEN (median_aov - purchase_amount) * 0.25 ELSE 0 END), 2) AS simulated_rev_lift,
+       ROUND((SUM(CASE WHEN purchase_amount < median_aov THEN (median_aov - purchase_amount) * 0.25 ELSE 0 END) * 100.0) / SUM(purchase_amount), 1) AS cohort_rev_lift_pct
+FROM   order_stats;
